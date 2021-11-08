@@ -1,0 +1,9 @@
+# dependencies
+/node_modules
+src/lang/info.js
+
+# config
+jest.config.js
+
+# production
+dist

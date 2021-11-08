@@ -1,0 +1,16 @@
+# Development
+.editorconfig
+.eslintignore
+.eslintrc
+browser-test.html
+tsconfig.json
+jest.config.js
+src
+.github
+
+# Useless tsc files
+dist/tsc/browser.*
+dist/tsc/cli.*
+
+# Dependencies
+node_modules
