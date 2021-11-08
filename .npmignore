@@ -7,6 +7,7 @@ tsconfig.json
 jest.config.js
 src
 .github
+img
 
 # Useless tsc files
 dist/tsc/browser.*

@@ -1,15 +1,36 @@
 import nearley from 'nearley';
 import grammar from './lang/info.js';
 
-function parse(editorCode: string) {
+/**
+ * Parses the infolang syntax into an abstract syntax tree.
+ *
+ * @param {string} code Code as string to parse.
+ * @return {*} Returns a object representing the AST.
+ * @throws No parse found error
+ */
+const parse = (code: string): any => {
   const parser = new nearley.Parser(nearley.Grammar.fromCompiled(grammar));
-  parser.feed(editorCode);
 
-  if (parser.results.length >= 1) return parser.results[0];
-  return null;
-}
+  try {
+    parser.feed(code);
+    return parser.results[0];
+  } catch (err: any) {
+    return {
+      status: 'error',
+      error_code: 0,
+      error_type: 'syntax error',
+      line: err.token.line,
+    };
+  }
+};
 
-function generateLine(node: any): any {
+/**
+ * Generates the javascript representation of the given AST node.
+ *
+ * @param {*} node Single AST node
+ * @return {string}  {string}
+ */
+const generateLine = (node: any): string => {
   switch (node.type) {
     case 'string':
     case 'lparen':
@@ -33,7 +54,7 @@ function generateLine(node: any): any {
       const assignList = node.assign_list
         .map(
           (assign: any) =>
-            `${assign.var_name.value} = ${generateLine(assign.value)};`
+            `${assign.var_name.value}=${generateLine(assign.value)};`
         )
         .join('\n');
 
@@ -66,7 +87,7 @@ function generateLine(node: any): any {
       const argList = node.arguments
         .map((arg: any) => generateLine(arg))
         .join(',');
-      return `${node.fun_name.value}(${argList})`;
+      return `${node.fun_name.value}(${node.line},${argList})`;
     }
 
     case 'expression':
@@ -109,26 +130,90 @@ function generateLine(node: any): any {
     default:
       throw new Error(`Error: Unhandled AST node type ${node.type}.`);
   }
-}
+};
 
-function generateCode(statements: any) {
-  return statements.map((statement: any) => generateLine(statement)).join('\n');
-}
+/**
+ * Generates javascript code from complete AST.
+ *
+ * @param {*} statements The abstract syntax tree as object.
+ * @return {string} {string}
+ */
+const generate = (statements: any): string => {
+  const compiledCode = statements
+    .map((statement: any) => generateLine(statement))
+    .join('\n');
 
-async function generate(statements: any) {
-  const runtime = `let count = 0;
-const print=(...args)=>console.log({step:count,log:[...args].join(" ")});
-const step=(num)=>{count++;return true;}
-const sqrt=(x)=>Math.sqrt(x);
-const abs=(x)=>x>=0?x:-x;
-const sign=(x)=>x>=0?(x>0?1:0):-1;
+  return `
+const logs=[];
+const steps=[];
+let count = 0;
+let ops = 0;
+let start, end;
+
+const print=(l, ...args)=>{step(l);logs.push({step:count,log:[...args].join(" ")});}
+const step=(num)=>{ops++;if(steps[count - 1]!==num){steps.push(num);count++;}if(ops>5000)throw new Error("timeout");return true;}
+
+const sqrt=(l,x)=>{step(l);return Math.sqrt(x);}
+const abs=(l,x)=>{step(l);return x>=0?x:-x;}
+const sign=(l,x)=>{step(l);return x>=0?(x>0?1:0):-1;}
+
+function main() {
+${compiledCode}
+return {logs, steps};
+}
+main()
 `;
+};
 
-  return `${runtime}\n${generateCode(statements)}`;
-}
+/**
+ * Calculates the length of the string without whitespaces.
+ *
+ * @param {string} str - String to count length.
+ * @return {*} number
+ */
+const calculateLength = (str: string): number => {
+  const whitespaces = [' ', '\n'];
 
-async function run(editorCode: string) {
-  return eval(await generate(parse(editorCode)));
-}
+  let count = 0;
+  for (let i = 0, len = str.length; i < len; i += 1) {
+    if (!whitespaces.includes(str[i])) count += 1;
+  }
+
+  return count;
+};
+
+/**
+ * Runs the infolang code and returns the output.
+ *
+ * @param {string} editorCode
+ * @return {*}
+ */
+const run = (editorCode: string): any => {
+  const ast = parse(editorCode);
+
+  if (ast?.status === 'error') return ast;
+
+  if (ast) {
+    try {
+      return {
+        status: 'success',
+        length: calculateLength(editorCode),
+        result: eval(generate(ast)),
+      };
+    } catch (err) {
+      return {
+        status: 'error',
+        error_code: 2,
+        error_type: 'timeout',
+      };
+    }
+  }
+
+  return {
+    status: 'error',
+    error_code: 1,
+    error_type: 'parsing error',
+  };
+};
 
 export default run;
